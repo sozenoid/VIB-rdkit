@@ -16,7 +16,7 @@ def get_weight_dic():
 
 def get_xyz_from_mol(mol):
 		"""
-		PRE: Takes in a mol rdkit that has one conformer (or at least the coordinats will be taken from the first one)
+		PRE: Takes in a mol rdkit that has one conformer (or at least the coordinates will be taken from the first one)
 		POST: returns an ndarray with the xyz coordinates
 		"""
 		atom_coords=[]
@@ -46,9 +46,6 @@ def replace_coords_in_mol_block(RDKIT_BLOCK_IN, coord_matrix):
 				)
 
 	RDKIT_BLOCK_OUT = ''.join(RDKIT_BLOCK)
-# =============================================================================
-# 	print RDKIT_BLOCK_OUT
-# =============================================================================
 	return RDKIT_BLOCK_OUT	
 
 def get_energy(rdkit_mol_block):
@@ -63,14 +60,13 @@ def get_energy(rdkit_mol_block):
 	return ff.CalcEnergy()
 
 
-
 def make_mass_matrix_from_atom_list(atom_list):
 	"""
 	PRE: Takes in an atom list
 	POST: Will return the mass matrix associated with it
 	the matrix is square and has 3n*3n elements and is diagonal for n atoms, the square root of the matrix is also returned
 	"""
-	dic_weights={'C':12,'H':1,'N':14, 'O':16}
+	dic_weights=get_weight_dic()
 	diag=[]
 	for ats in atom_list:
 		diag.extend([1.0/dic_weights[ats]]*3) # those masses are atomic masses so the factor 1.66e-27
@@ -89,7 +85,7 @@ def compute_hessian(mol):
 	"""
 	
 	atom_list, atom_coords = get_xyz_from_mol(mol)
-	print atom_list, Chem.MolToSmiles(mol)
+	print "MOLECULE HAS ATOMS: ", atom_list, "; SMILES IS: ", Chem.MolToSmiles(mol), "\n"
 	ORIG_MOL_BLOCK = Chem.MolToMolBlock(mol)
 
 	lin_coords = np.reshape(atom_coords, (1, len(atom_coords)*3))[0]
@@ -102,6 +98,7 @@ def compute_hessian(mol):
 		return get_energy(replace_coords_in_mol_block(orig_rdkit_block, np.reshape(coords, shape))) 
 	
 	hessian = nd.Hessian(get_energy_from_coords)(lin_coords, shape, ORIG_MOL_BLOCK)
+
 	massmat, massmat_sqr = make_mass_matrix_from_atom_list(atom_list)
 	avg_hessian = (hessian + hessian.T)/2 *4185*1e8/1e-10/6.022e23          # Units conversion factors taken from http://openmopac.net/manual/Hessian_Matrix.html
 	mass_weighted = np.matmul(np.matmul(massmat_sqr, avg_hessian), massmat_sqr)
@@ -114,7 +111,11 @@ if __name__ == "__main__":
 	import numpy as np
 	import numdifftools as nd 
 	
-	test_mol = Chem.MolFromSmiles('N')
+	
+# =============================================================================
+# 	GET A TEST MOL
+# =============================================================================
+	test_mol = Chem.MolFromSmiles('C1=CC=C2C=CC=CC2=C1')
 	test_mol = Chem.AddHs(test_mol)
 	AllChem.EmbedMolecule(test_mol)
 	print "BEFORE OPTI"
@@ -127,4 +128,12 @@ if __name__ == "__main__":
 	cf = ff.Minimize(n_steps, tol, tol)	
 	print "AFTER OPTI ({})".format(cf)
 	print Chem.MolToMolBlock(test_mol)
-	print [float('{0:4.4f}'.format(np.sqrt(x*6.022e28)/2/np.pi/2.99e10)) for x in sorted(np.linalg.eig(np.array(compute_hessian(test_mol)))[0])] # Conversion factors taken from http://openmopac.net/manual/Hessian_Matrix.html
+	
+	
+# =============================================================================
+# 	GET ITS VIBRATIONAL FREQUENCIES
+# =============================================================================
+	freqs = [float('{0:4.4f}'.format(np.sqrt(x*6.022e28)/2/np.pi/2.99e10)) for x in sorted(np.linalg.eig(np.array(compute_hessian(test_mol)))[0])] # Conversion factors taken from http://openmopac.net/manual/Hessian_Matrix.html
+	
+	print "=========Frequencies in cm-1 (including translation, rotation)========="
+	print freqs
